@@ -1,0 +1,301 @@
+---
+title: "Mirroring HLM7 in R"
+author: "Lakshmi Lalchandani"
+date: "12/14/2016"
+output:
+  pdf_document:
+    toc: yes
+  html_document:
+    highlight: zenburn
+    self_contained: yes
+    theme: cosmo
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Purpose
+The purpose of this manual is to compare the procedures and analyses for hierarchical linear models from two different statistical software programs: HLM 7 and R. We will be using the High School and Beyond - 1982 data set, (Raudenbush & Bryk, 2002). In R, this data set can be found in the `mlmRev` package. Installing this particular package will also load the required package `lme4`. `lme4` contains the function `lmer` that we will use to run the hierarchical linear models in R.  You will also have to install the package `lmerTest` so that we can extract the p-values. 
+
+``` {r results = 'hide', message = F, warning = F}
+library('lmerTest')
+library('mlmRev')
+```
+
+### The data `Hsb82`
+`Hsb82` is a data set that comes from a 1982 study. The data frame has 7185 observations of 8 variables: 
+__school__ an ordered factor designating the school ID  
+__minrty__ a yes/no factor designting minority status  
+__sx__ a male/female factor designating sex  
+__ses__ numeric scores designating the socio-economic status of the student  
+__mAch__ numeric scores of Math Achievement of the student  
+__meanses__ numeric scores of the mean socio-economic status for each school  
+__sector__ a factor designating Public or Catholic school  
+__cses__ numeric scores where socio-economic scores are group centered by school    
+
+#### Student level variables
+In this data set, the student level variables are *school*, *minrty*, *sx*, *ses*, *mAch*, and *cses*.  
+
+#### School level variables
+The school level variables are , *school*, *meanses*, and *sector*.
+
+#### Organizing the data
+In R, the data is already organized in the manner needed for `lmer`. That is, there is one row per student, with student nested within school. We need only to add a column of student id's. 
+
+```{r}
+student <- 1:nrow(Hsb82)
+df <- data.frame(student,Hsb82)
+```
+
+In HLM 7, you must begin with two separate files: one of the student level variables and one of the school level variables. The following is the first 10 observations of each file.
+
+```{r, echo=FALSE}
+school <- rep(1224,10)
+minrty <- Hsb82$minrty[1:10]
+sx <- Hsb82$sx[1:10]
+ses <- Hsb82$ses[1:10]
+mAch <- Hsb82$mAch[1:10]
+ces <- Hsb82$cses[1:10]
+hsbStudent <- data.frame(school,minrty,sx,ses,mAch,ces)
+
+id <- c(1224, 1288, 1296, 1308, 1317, 1358,1374, 1433, 1436, 1461)
+sector <- c("Public","Public","Public","Catholic", "Catholic", "Public","Public","Catholic", "Catholic", "Public")
+meanses <- c(-.428, .128, -.42, .534, .351, -.014, -.007, .718, .596, .683)
+hsbSchool <- data.frame(id,sector,meanses)
+
+hsbStudent;hsbSchool
+```
+
+In HLM 7, you will then create an MDM file and an MDMT which will compile the data from both files in two levels.
+
+## The models
+We will run 4 different types of hierarchical linear models as defined by Raudenbush & Bryk (2002)  
+1. The unconditional model (also known as the One-Way ANOVA model)  
+2. Regression with means-as-outcomes  
+3. Random-coefficient model  
+4. Intercepts and slopes as outcomes model  
+
+I will include both the Mixed model and the Hierarchical model before the analysis. I will also indicate possible research questions that each model can address. However, please note that many of the research questions can be answered only dependent on the centering decision made prior to the analysis. 
+
+# The unconditional model
+In this model, the simplest model, $\gamma_{0,0}$ estimates the weighted grand mean of Y. The estimate for $u_{0,j}$ is the amount that mean varies.  
+
+## Research questions 
+1. What is the overall mean math achievement?
+2. What proportion of the variance in student math achievement is at the school level?
+
+## Equations
+### Hierarchical Model
+##### Level 1 (student level)
+> $$mAch_{i,j} = \beta_{0j} + r_{ij}$$  
+
+##### Level 2 (school level)  
+> $$\beta_{0,j} = \gamma_{00} + u_{0j}$$
+
+### Mixed Model
+> $$mAch_{i,j} = \gamma_{00} + u_{0,j} + r_{ij}$$
+
+## Analysis
+In HLM 7, in order to run an unconditional model, all that needs to be specified is the outcome variable. In this case, the outcome variable is mAch, then click _Run Analysis_.
+
+![The relevant output from HLM 7.](unconditional.png)
+
+``` {r}
+unconditional <- lmer(mAch ~ 1 +( 1|school), data = df)
+summary(unconditional)
+```
+The formula in R states that it is predicting the intercept and the random component varies due to school.
+
+For the unconditional model, R will not produce p-values. But there are a couple of hacks to get some information.
+
+``` {r}
+# To extract the p-values for the estimate of the intercept:
+
+coefs <- data.frame(coef(summary(unconditional)))
+coefs$p.value <- 2 * (1-pnorm(abs(coefs$t.value)))
+coefs
+
+# To extract the chi square for the random effects:
+
+# First we will run a model without a random component.
+# Then we will compare the two models
+
+reg.unconditional <- lm(mAch ~ 1, data = df)
+anova(unconditional,reg.unconditional)
+```
+
+The estimation of the $\chi^2$ statistic does not line up quite as well because we are forced to fit the models using maximum likelihood (ML) as opposed to restricted maximum likelihood (REML). Maximum likelihood can be better for unbalanced data, but can produce biased results. However, the deviace is relatively close.  
+
+### Answers to research questions
+1. What is the overall mean math achievement?  
+
+> The estimated fixed effect, $\gamma_{00}$, is the weighted estimate of the grand mean math achievement (12.637).
+
+2. What proportion of the variance in student math achievement is at the school level?
+
+> We can use the break down of the variance components to decipher how much variance is explained at each level.
+
+``` {r}
+student_var <- 39.148
+school_var <- 8.614
+(proportion_school_var <- school_var/(school_var+student_var))
+```
+Approximately 18.04% of the variance in math achievement is at the school level.  
+
+# Regression with means-as-outcomes  
+In this type of model, the equation now predicts the mean math achievement for each $school_j$ dependent upon the mean socio-economic status of $school_j$.  
+
+## Research questions
+1. Is there an association between school mean socio-economic status and mean math achievement?
+2. How much of the between-school variance in math achievement is explained by mean ses?
+
+### Hierarchical Model
+##### Level 1 (student level)
+> $$mAch_{i,j} = \beta_{0j} + r_{ij}$$  
+
+##### Level 2 (school level)  
+> $$\beta_{0,j} = \gamma_{00} + \gamma_{01}(mean ses) + u_{0j}$$
+
+### Mixed Model
+> $$mAch_{i,j} = \gamma_{00} + \gamma_{01}(mean ses) + u_{0,j} + r_{ij}$$
+
+## Analysis
+In HLM 7, in order to run this model, all that needs to be specified is the outcome variable at level 1 and the level 2 variable, meanses. _Run Analysis_.
+
+![The relevant output from HLM 7.](mean.as.outcome.png)
+
+``` {r}
+mean_outcome <- lmer(mAch ~ 1 + meanses + (1|school), data = df)
+summary(mean_outcome)
+ranova(mean_outcome)
+```
+The formula in R states that it is estimating the intercept (mean math achievement) as associated with mean ses and the random component varies due to school.  
+
+As long as `lmerTest` is installed, the `summary()` function should provide the p values for the fixed effects (the intercept and slope of mean ses). The function `ranova()` in `lmerTest` will provide the chi square test of the random effects.  
+
+Again, there are some expected differences in the output between HLM 7 and R.  HLM 7 uses a Bayesian shrinkage estimation for the parameter estimates whereas R uses restricted maximum likelihood. The parameter estimates for the fixed effects will generally be very similar to each other, however they tend to differ on the tests of the random effects, $\chi^2$. 
+
+### Answers to research questions
+1. Is there an association between school mean socio-economic status and mean math achievement?
+There is a significant association between the school mean ses and the mean math achievement such that schools that have higher mean ses also tend to have higher mean math achievement. As mean ses increases by 1 unit, math achievement is predicted to increase by 5.86 points.
+
+2. How much of the between-school variance in math achievement is explained by mean ses?
+To answer this question, we can compare the school level variance component from this model to the residual variance in the unconditional model. This will tell us how much of the residual error was reduced by accounting for the mean ses of the school.
+
+``` {r}
+orig_var <- school_var
+meanses_var <- 2.639
+
+(var_explained <- (orig_var-meanses_var)/orig_var)
+```
+The estimated proportion of the variance in math achievement scores that is accounted for my mean ses is 69.36%.  
+
+# Random-coefficient model  
+In this type of model, we will remove the school level predictor and incorporate a student level predictor. We will use ses again, however it is now at the student level.  In this model, each school has a unique intercept (mean math achievement) and a unique slope associated with ses.
+
+## Research questions
+1. Is there evidence that schools vary in their association between math achievement and ses?
+2. What is the range of the relationship between ses and mean math achievement expected to be for 95% of the schools?
+
+### Hierarchical Model
+Given that I am interested the how the mean achievement varies across schools, I have opted to group mean center the ses variable. To do this in HLM 7, when you add ses to the level 1 equation, the drop down menu provides the option to group center. In R, the variable __cses__ is group mean centered.  Otherwise, you would have to create an additional column of ses scores that are centered around the school mean.
+
+##### Level 1 (student level)
+> $$mAch_{i,j} = \beta_{0j} + \beta_{1j}(ses_{ij} - \bar{ses_{.j}}) + r_{ij}$$  
+
+##### Level 2 (school level)  
+> $$\beta_{0,j} = \gamma_{00} + u_{0j}$$
+> $$\beta_{1j} = \gamma_{10} + u_{1j}$$
+
+### Mixed Model
+> $$mAch_{i,j} = \gamma_{00} + \gamma_{10}(ses_{ij} - \bar{ses_{.j}}) + u_{0j} + u_{1j}*(ses_{ij} - \bar{ses_{.j}}) + r_{ij}$$  
+
+## Analysis
+In HLM 7, in order to run this model, all that needs to be specified is the outcome variable and the level 1 predictor (group centered as discussed). In order to run the above specified model, you must also toggle on the variance component for $\beta_{1j}$.
+
+![Toggle on the variance](variance.png)
+
+![The relevant output from HLM 7.](randomcoefficient.png)
+
+``` {r}
+randomCoef <- lmer(mAch ~ 1 + cses + (1 + cses|school), data = df)
+summary(randomCoef)
+ranova(randomCoef)
+```
+
+If you decided that you did not want to permit the slope to vary, in HLM 7 you would toggle off the error variance. In R, you would constrict the random effect to be `(1|school)` like the previous models.
+
+### Answers to research questions
+1. Is there evidence that schools vary in their association between math achievement and ses?
+Yes, there is evidence that schools vary signficantly in their association between math achievement and ses. This is evidenced by the $\chi^2$ test. Again, the $\chi^2$'s don't match between HLM 7 and R, but they are both significant, which makes me comfortable with this response. 
+2. For this answer, we will create a 95% plausible value range around the slope for ses.
+$$\gamma_{10} \pm 1.96*\sqrt{u_{i}}$$
+$$2.19 \pm 1.96*\sqrt{.694}$$
+``` {r, echo=FALSE}
+lower <- 2.19 - (1.96*sqrt(.694))
+upper <- 2.19 + (1.96*sqrt(.694))
+paste(round(lower,3),"to",round(upper,3))
+```
+
+# Intercepts and slopes as outcomes model  
+In this type of model, we will keep the same level 1 model as the previous example and we will add a level 2 predictor as well, sector.
+
+## Research questions
+1. Does the relationship between student ses and math achievement depend on whether the school is public or Catholic?
+
+### Hierarchical Model
+I will be using a dummy code for sector (+1 if Catholic, 0 if public). R will automatically create dummy codes (1 being the first alphabetically) unless otherwise specified. For the purpose of this research question, I have left sector uncentered.  
+
+##### Level 1 (student level)
+> $$mAch_{i,j} = \beta_{0j} + \beta_{1j}(ses_{ij} - \bar{ses_{.j}}) + r_{ij}$$  
+
+##### Level 2 (school level)  
+> $$\beta_{0,j} = \gamma_{00} + \gamma_{01}(Catholic) + u_{0j}$$
+> $$\beta_{1j} = \gamma_{10} + \gamma_{11}(Catholic) + u_{1j}$$
+
+### Mixed Model
+> $$mAch_{i,j} = \gamma_{00} + \gamma_{01}(Catholic) + \gamma_{10}(ses_{ij} - \bar{ses_{.j}}) + \gamma_{11}(Catholic)*(ses_{ij} - \bar{ses_{.j}})+ u_{0j} + u_{1j}*(ses_{ij} - \bar{ses_{.j}}) + r_{ij}$$  
+
+## Analysis
+Again, it is important to decide what you want to permit to vary and what you want to constrict. In HLM 7, you will have to toggle on the error terms for each slope. I have opted to let everything vary. 
+
+![The relevant output from HLM 7.](int_and_slope.png)
+
+``` {r}
+int_slope <- lmer(mAch ~ cses * sector + (1 + cses|school), data = df)
+summary(int_slope)
+ranova(int_slope)
+```
+Notice that in the formula instead of using a + between cses and sector, a * will ensure to include the interaction and all the components of the interaction.  
+
+The R output can be a little confusing when there are predictors at both levels because it puts all interactions at the end rather than the order of the levels in the models. I find it easiest to decipher the $\gamma$'s.
+
+The following are in the order of the R output:
+$\gamma_{00} \Rightarrow$ Intercept of the intercepts (mean math achievement accounting for ses)  
+$\gamma_{10} \Rightarrow$ Intercept of the slopes (mean slope due to ses)
+$\gamma_{01} \Rightarrow$ Influence of level 2 predictor on intercept (influence of Catholic on mean math achievement)
+$\gamma_{11} \Rightarrow$ Influence of level 2 predictor on slopes (how the relationship between ses and math achievement changes due to Catholic)
+
+
+### Answers to research questions
+1. Does the relationship between student ses and math achievement depend on whether the school is public or Catholic?
+Yes, examining $\gamma_{11}$ in HLM 7 or the estimate for cses:Catholic we see that the influence of ses on math achievement is reduced by 1.34.  That is, overall, one can expect a 2.8 point increase in math achievement for an increase in ses by 1 unit. This influence of ses on math achievement is reduced by 1.34 points. So that in a Catholic school each unit increase in ses is only associated with a 1.46 point increase in math achievement.  
+
+# References
+Douglas Bates, Martin Maechler and Ben Bolker (2014). mlmRev: Examples from
+  Multilevel Modelling Software Review. R package version 1.0-6.
+  https://CRAN.R-project.org/package=mlmRev
+
+Douglas Bates, Martin Maechler, Ben Bolker, Steve Walker (2015). Fitting Linear
+  Mixed-Effects Models Using lme4. Journal of Statistical Software, 67(1), 1-48.
+  doi:10.18637/jss.v067.i01.
+
+Alexandra Kuznetsova, Per Bruun Brockhoff and Rune Haubo Bojesen Christensen
+  (2016). lmerTest: Tests in Linear Mixed Effects Models. R package version 2.0-33.
+  https://CRAN.R-project.org/package=lmerTest
+  
+Raudenbush, Stephen and Bryk, Anthony (2002), Hierarchical Linear Models: Applications and   Data Analysis Methods, Sage (chapter 4).
+
+
