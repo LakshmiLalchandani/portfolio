@@ -10,5 +10,6 @@ FinalProject (both files) - this project was included to exhibit my statistical 
 
 Diss1Social.py - this is a python script written for PsychoPy 2. I wrote this program for an experiment that included 3 conditions, embedded movie stimuli, and recorded both response times and key press values.
 
-ExampleDeliverableScript.R - This is an R script that was written for a client to use over again. The client had little knowledge of R and was able to replicate the analyses and figures that I had conducted on the next iterateration of data. The script is heavily commented to ensure the client was successful. 
+ExampleDeliverableScript.R - this is an R script that was written for a client to use over again. The client had little knowledge of R and was able to replicate the analyses and figures that I had conducted on the next iterateration of data. The script is heavily commented to ensure the client was successful. 
 
+Lalchandani Dissertation.pdf - this is exactly what it seems to be, my final dissertation. It can also be found at https://scholar.colorado.edu/concern/graduate_thesis_or_dissertations/s4655g713. I have included my dissertation to highlight my writing acumen and my ability to take complex methods and analyses and convey them clearly and fairly simply. 
